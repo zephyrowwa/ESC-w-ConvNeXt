@@ -24,7 +24,7 @@ satisfaction_map = {
 @st.cache_resource
 def load_model():
     model_path = hf_hub_download(repo_id="zephyrowwa/convnxtferhehe", filename="FRconvnext_full(R)(A).pth")
-    model = torch.load(model_path, map_location="cpu"), weights_only= False))
+    model = torch.load(model_path, map_location="cpu", weights_only= False)
     model.eval()
     return model
 
