@@ -6,6 +6,7 @@ from PIL import Image
 import cv2
 import numpy as np
 from timm import create_model
+from huggingface_hub import hf_hub_download
 
 # Emotion class labels (adjust if yours differ)
 class_labels = ['angry', 'disgusted', 'frightened', 'happy', 'neutral', 'sad', 'surprised']
@@ -19,10 +20,10 @@ satisfaction_map = {
     'surprised': 'satisfied'
 }
 
-# Load ConvNeXt model
-@st.cache_resource
 def load_model():
-    model = torch.load("FRconvnext_full(R)(A).pth", map_location='cpu', weights_only=False)
+    model_path = hf_hub_download(repo_id="zephyrowwa/convnxtferhehe", filename="FRconvnext_full(R)(A).pth")
+    model = create_model("convnext_tiny", pretrained=False, num_classes=7)
+    model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
     return model
 
