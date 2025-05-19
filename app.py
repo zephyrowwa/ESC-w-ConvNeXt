@@ -20,10 +20,11 @@ satisfaction_map = {
     'surprised': 'satisfied'
 }
 
+
+@st.cache_resource
 def load_model():
     model_path = hf_hub_download(repo_id="zephyrowwa/convnxtferhehe", filename="FRconvnext_full(R)(A).pth")
-    model = create_model("convnext_tiny", pretrained=False, num_classes=7)
-    model.load_state_dict(torch.load(model_path, map_location="cpu"))
+    model = torch.load(model_path, map_location="cpu"), weights_only= False)
     model.eval()
     return model
 
