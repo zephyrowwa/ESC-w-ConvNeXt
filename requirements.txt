@@ -4,3 +4,4 @@ torchvision
 timm
 Pillow
 opencv-python-headless
+huggungface_hub
