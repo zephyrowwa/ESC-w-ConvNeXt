@@ -2,13 +2,12 @@ import streamlit as st
 import torch
 import torch.nn.functional as F
 from torchvision import transforms
-from PIL import Image
 import cv2
 import numpy as np
 from timm import create_model
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
-# Emotion class labels (adjust if yours differ)
 class_labels = ['angry', 'disgusted', 'frightened', 'happy', 'neutral', 'sad', 'surprised']
 satisfaction_map = {
     'angry': 'dissatisfied',
@@ -20,7 +19,6 @@ satisfaction_map = {
     'surprised': 'satisfied'
 }
 
-
 @st.cache_resource
 def load_model():
     model_path = hf_hub_download(repo_id="zephyrowwa/convnxtferhehe", filename="FRconvnext_full(R)(A).pth")
@@ -28,70 +26,61 @@ def load_model():
     model.eval()
     return model
 
-# Preprocess uploaded image
-def preprocess_image(image):
+def preprocess_face(face_img):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize([0.5]*3, [0.5]*3)
     ])
-    return transform(image).unsqueeze(0)
+    pil_face = Image.fromarray(cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB))
+    return transform(pil_face).unsqueeze(0)
 
-def crop_face(image):
-    face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-    image_np = np.array(image.convert("RGB"))
-    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+def detect_and_classify_faces(frame, model, face_cascade):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-    if len(faces) == 0:
-        return image  # No face detected, return original image
+    for (x, y, w, h) in faces:
+        face_img = frame[y:y+h, x:x+w]
+        input_tensor = preprocess_face(face_img)
 
-    x, y, w, h = faces[0]  # Only use the first detected face
-    face = image_np[y:y+h, x:x+w]
-    face_image = Image.fromarray(face)
-    return face_image
+        with torch.no_grad():
+            outputs = model(input_tensor)
+            probs = F.softmax(outputs, dim=1)
+            pred_idx = torch.argmax(probs, dim=1).item()
+            emotion = class_labels[pred_idx]
+            satisfaction = satisfaction_map[emotion]
 
-# Predict function
-def predict(model, input_tensor):
-    with torch.no_grad():
-        outputs = model(input_tensor)
-        probs = F.softmax(outputs, dim=1)
-        predicted_class = torch.argmax(probs, dim=1).item()
-    return class_labels[predicted_class], probs.squeeze().tolist()
+        label = f"{emotion} ({satisfaction})"
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        cv2.putText(frame, label, (x, y-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-# UI
-st.set_page_config(page_title=" ESI w/ ConvNeXT ")
-st.title("Employee Satisfaction Classifier")
-st.write("Upload an image to classify emotions using a ConvNeXt model.")
+    return frame
 
-option = st.radio("Choose input method:", ("Upload Image", "Use Webcam"))
+st.set_page_config(page_title="RT emotionengine")
+st.title("RT Facial Emotion Classifier")
+st.markdown("Haar Cascade + ConvNeXt 2 classify yo emotion yuh")
 
-image = None
+run = st.checkbox("start the emotion classifyin' ")
+FRAME_WINDOW = st.image([])
 
-if option == "Upload Image":
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
+model = load_model()
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+cap = None
 
-elif option == "Use Webcam":
-    camera_input = st.camera_input("Take a picture")
-    if camera_input is not None:
-        image = Image.open(camera_input).convert("RGB")
+if run:
+    cap = cv2.VideoCapture(0)
+    while run:
+        ret, frame = cap.read()
+        if not ret:
+            st.warning("walang webcam pre ano ba yan.")
+            break
 
-# If an image is provided from either method
-if image:
-    st.image(image, caption="Original Input", use_container_width=True)
+        frame = cv2.flip(frame, 1)
+        annotated_frame = detect_and_classify_faces(frame, model, face_cascade)
 
-    face_image = crop_face(image)
-    st.image(face_image, caption="Cropped Face", use_container_width=False)
-
-    model = load_model()
-    input_tensor = preprocess_image(face_image)
-    label, probabilities = predict(model, input_tensor)
-    satisfaction = satisfaction_map[label]
-
-    st.markdown(f"### You are feeling/looking: **{label}**")
-    st.markdown(f"### You are probably: **{satisfaction}** while working")
-
-    st.subheader("Confidence Scores")
-    st.bar_chart({lbl: prob for lbl, prob in zip(class_labels, probabilities)})
+        FRAME_WINDOW.image(cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB))
+else:
+    if cap:
+        cap.release()
+    st.write("tick da box to strat.")
